@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Card,
   CardContent,
@@ -38,7 +39,15 @@ interface UnderlyingMeta {
 }
 
 const OPTION_TYPES = ["CALL", "PUT", "BOTH"]
-const EXPIRY_FLAGS = ["MONTH", "WEEK"]
+const EXPIRY_FLAGS = [
+  { value: "WEEK", label: "Weekly" },
+  { value: "MONTH", label: "Monthly" },
+]
+const EXPIRY_CODES = [
+  { value: 1, label: "Current" },
+  { value: 2, label: "Next" },
+  { value: 3, label: "Far" },
+]
 const INTERVALS = [
   { value: "1", label: "1 min" },
   { value: "5", label: "5 min" },
@@ -63,19 +72,28 @@ function subtractMonths(dateStr: string, months: number): string {
   return d.toISOString().split("T")[0]
 }
 
+function toggleArray<T>(arr: T[], item: T): T[] {
+  return arr.includes(item) ? arr.filter((v) => v !== item) : [...arr, item]
+}
+
 export function DownloadControls() {
   const { setActiveJob, isDownloading } = useDownloadStore()
   const [isPending, setIsPending] = useState(false)
   const [underlyings, setUnderlyings] = useState<Record<string, UnderlyingMeta>>({})
-  const [form, setForm] = useState({
-    underlying_scrip: "NIFTY",
-    option_type: "BOTH",
-    expiry_flag: "MONTH",
-    expiry_code: "1",
-    strike_range: "10",
-    interval: "1",
-    from_date: "",
-    to_date: "",
+  const [form, setForm] = useState(() => {
+    const today = new Date()
+    const weekAgo = new Date(today)
+    weekAgo.setDate(weekAgo.getDate() - 7)
+    return {
+      underlying_scrip: "NIFTY",
+      option_type: "BOTH",
+      expiry_flags: ["MONTH"] as string[],
+      expiry_codes: [1] as number[],
+      strike_range: "10",
+      interval: "1",
+      from_date: weekAgo.toISOString().split("T")[0],
+      to_date: today.toISOString().split("T")[0],
+    }
   })
 
   useEffect(() => {
@@ -95,7 +113,8 @@ export function DownloadControls() {
 
   const totalStrikes = (parseInt(form.strike_range) || 0) * 2 + 1
   const optionCount = form.option_type === "BOTH" ? 2 : 1
-  const totalApiCalls = totalStrikes * optionCount
+  const expiryComboCount = form.expiry_flags.length * form.expiry_codes.length
+  const totalApiCalls = totalStrikes * optionCount * expiryComboCount
 
   const applyPreset = (months: number) => {
     const toDate = form.to_date || new Date().toISOString().split("T")[0]
@@ -119,6 +138,16 @@ export function DownloadControls() {
       return
     }
 
+    if (form.expiry_flags.length === 0) {
+      toast.error("Select at least one expiry type")
+      return
+    }
+
+    if (form.expiry_codes.length === 0) {
+      toast.error("Select at least one expiry code")
+      return
+    }
+
     setIsPending(true)
     try {
       const result = await downloadsApi.start({
@@ -127,15 +156,15 @@ export function DownloadControls() {
         instrument: selectedMeta.instrument,
         security_id: selectedMeta.security_id,
         option_type: form.option_type,
-        expiry_flag: form.expiry_flag,
-        expiry_code: parseInt(form.expiry_code),
+        expiry_flags: form.expiry_flags,
+        expiry_codes: form.expiry_codes,
         strike_range: parseInt(form.strike_range),
         interval: form.interval,
         from_date: form.from_date,
         to_date: form.to_date,
       })
       setActiveJob(result)
-      toast.success(`Download started: ${totalStrikes} strikes x ${optionCount} type(s)`)
+      toast.success(`Download started: ~${totalApiCalls} API calls`)
     } catch (err) {
       if (err instanceof ApiError) {
         toast.error(err.detail)
@@ -206,39 +235,41 @@ export function DownloadControls() {
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
               <Field>
                 <FieldLabel>Expiry Type</FieldLabel>
-                <Select
-                  value={form.expiry_flag}
-                  onValueChange={(v) => setForm({ ...form, expiry_flag: v })}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {EXPIRY_FLAGS.map((f) => (
-                        <SelectItem key={f} value={f}>{f}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                <div className="flex flex-col gap-2 pt-1">
+                  {EXPIRY_FLAGS.map((f) => (
+                    <label key={f.value} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={form.expiry_flags.includes(f.value)}
+                        onCheckedChange={() =>
+                          setForm({
+                            ...form,
+                            expiry_flags: toggleArray(form.expiry_flags, f.value),
+                          })
+                        }
+                      />
+                      {f.label}
+                    </label>
+                  ))}
+                </div>
               </Field>
               <Field>
                 <FieldLabel>Expiry</FieldLabel>
-                <Select
-                  value={form.expiry_code}
-                  onValueChange={(v) => setForm({ ...form, expiry_code: v })}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value="1">Current / Near</SelectItem>
-                      <SelectItem value="2">Next</SelectItem>
-                      <SelectItem value="3">Far</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                <div className="flex flex-col gap-2 pt-1">
+                  {EXPIRY_CODES.map((c) => (
+                    <label key={c.value} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={form.expiry_codes.includes(c.value)}
+                        onCheckedChange={() =>
+                          setForm({
+                            ...form,
+                            expiry_codes: toggleArray(form.expiry_codes, c.value),
+                          })
+                        }
+                      />
+                      {c.label}
+                    </label>
+                  ))}
+                </div>
               </Field>
               <Field>
                 <FieldLabel htmlFor="strike_range">Strike Range (+/-)</FieldLabel>
@@ -251,7 +282,7 @@ export function DownloadControls() {
                   onChange={(e) => setForm({ ...form, strike_range: e.target.value })}
                 />
                 <FieldDescription>
-                  {totalStrikes} strikes, ~{totalApiCalls} API calls
+                  {totalStrikes} strikes x {expiryComboCount} expiry combo(s) = ~{totalApiCalls} API calls
                 </FieldDescription>
               </Field>
             </div>

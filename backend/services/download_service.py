@@ -205,8 +205,8 @@ def run_download_job(
     instrument: str,
     security_id: int,
     option_types: list[str],
-    expiry_flag: str,
-    expiry_code: int,
+    expiry_flags: list[str],
+    expiry_codes: list[int],
     strike_range: int,
     interval: str,
     from_date_str: str,
@@ -233,20 +233,22 @@ def run_download_job(
         # Map CALL/PUT for API
         api_option_map = {"CE": "CALL", "PE": "PUT", "CALL": "CALL", "PUT": "PUT"}
 
-        # Build work items: (strike_label, api_option_type, chunk_from, chunk_to)
+        # Build work items: (expiry_flag, expiry_code, strike_label, api_option_type, storage_ot, chunk_from, chunk_to)
         all_work = []
-        for offset in strike_offsets:
-            strike_label = build_strike_label(offset)
-            for ot in option_types:
-                api_ot = api_option_map.get(ot, ot)
-                for chunk_from, chunk_to in date_chunks:
-                    all_work.append((strike_label, api_ot, ot, chunk_from, chunk_to))
+        for ef in expiry_flags:
+            for ec in expiry_codes:
+                for offset in strike_offsets:
+                    strike_label = build_strike_label(offset)
+                    for ot in option_types:
+                        api_ot = api_option_map.get(ot, ot)
+                        for chunk_from, chunk_to in date_chunks:
+                            all_work.append((ef, ec, strike_label, api_ot, ot, chunk_from, chunk_to))
 
         job["total_requests"] = len(all_work)
-        logger.info("Job %s: %d work items, %d date chunks, %d strikes, %d option types",
-                     job_id, len(all_work), len(date_chunks), len(strike_offsets), len(option_types))
+        logger.info("Job %s: %d work items, %d date chunks, %d strikes, %d option types, expiry_flags=%s, expiry_codes=%s",
+                     job_id, len(all_work), len(date_chunks), len(strike_offsets), len(option_types), expiry_flags, expiry_codes)
 
-        for strike_label, api_ot, storage_ot, chunk_from, chunk_to in all_work:
+        for expiry_flag, expiry_code, strike_label, api_ot, storage_ot, chunk_from, chunk_to in all_work:
             if _cancel_flags.get(job_id, False):
                 job["status"] = "cancelled"
                 job["completed_at"] = datetime.now().isoformat()
@@ -255,7 +257,7 @@ def run_download_job(
             try:
                 # Skip API call if data already exists for this chunk
                 if _has_data(duck, underlying_scrip, expiry_flag, expiry_code, interval, strike_label, storage_ot, chunk_from, chunk_to):
-                    logger.info("Skipping %s %s %s [%s-%s] — data exists", underlying_scrip, strike_label, storage_ot, chunk_from, chunk_to)
+                    logger.info("Skipping %s %s/%s %s %s [%s-%s] — data exists", underlying_scrip, expiry_flag, expiry_code, strike_label, storage_ot, chunk_from, chunk_to)
                     job["skipped_requests"] += 1
                     job["completed_requests"] += 1
                     continue
@@ -286,7 +288,7 @@ def run_download_job(
                 job["completed_at"] = datetime.now().isoformat()
                 return
             except Exception as e:
-                logger.error("Download error for %s strike=%s %s [%s-%s]: %s", underlying_scrip, strike_label, api_ot, chunk_from, chunk_to, str(e))
+                logger.error("Download error for %s %s/%s strike=%s %s [%s-%s]: %s", underlying_scrip, expiry_flag, expiry_code, strike_label, api_ot, chunk_from, chunk_to, str(e))
                 job["failed_requests"] += 1
                 job["completed_requests"] += 1
 
@@ -308,8 +310,8 @@ def start_download_thread(
     instrument: str,
     security_id: int,
     option_types: list[str],
-    expiry_flag: str,
-    expiry_code: int,
+    expiry_flags: list[str],
+    expiry_codes: list[int],
     strike_range: int,
     interval: str,
     from_date: str,
@@ -322,7 +324,7 @@ def start_download_thread(
         target=run_download_job,
         args=(
             job_id, underlying_scrip, exchange_segment, instrument,
-            security_id, option_types, expiry_flag, expiry_code,
+            security_id, option_types, expiry_flags, expiry_codes,
             strike_range, interval, from_date, to_date,
             access_token, client_id, duckdb_path,
         ),

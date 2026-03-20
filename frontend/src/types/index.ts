@@ -48,8 +48,8 @@ export interface DownloadRequest {
   instrument: string
   security_id: number
   option_type: string
-  expiry_flag: string
-  expiry_code: number
+  expiry_flags: string[]
+  expiry_codes: number[]
   strike_range: number
   interval: string
   from_date: string

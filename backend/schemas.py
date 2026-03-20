@@ -67,19 +67,33 @@ class DownloadRequest(BaseModel):
     instrument: str
     security_id: int
     option_type: str          # "CALL", "PUT", "BOTH"
-    expiry_flag: str          # "MONTH" or "WEEK"
-    expiry_code: int = 1      # API: 1=current/near, 2=next, 3=far (docs say 0-based but API rejects 0)
+    expiry_flags: list[str]   # ["MONTH"], ["WEEK"], or ["MONTH", "WEEK"]
+    expiry_codes: list[int]   # [1], [1,2], [1,2,3]  (1=current, 2=next, 3=far)
     strike_range: int = 10    # ATM +/- N
     interval: str = "1"       # "1","5","15","25","60","D"
     from_date: str
     to_date: str
 
-    @field_validator("underlying_scrip", "exchange_segment", "instrument", "option_type", "expiry_flag", "interval", "from_date", "to_date")
+    @field_validator("underlying_scrip", "exchange_segment", "instrument", "option_type", "interval", "from_date", "to_date")
     @classmethod
     def not_empty_str(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("Field cannot be empty")
         return v.strip()
+
+    @field_validator("expiry_flags")
+    @classmethod
+    def valid_expiry_flags(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("At least one expiry type is required")
+        return v
+
+    @field_validator("expiry_codes")
+    @classmethod
+    def valid_expiry_codes(cls, v: list[int]) -> list[int]:
+        if not v:
+            raise ValueError("At least one expiry code is required")
+        return v
 
 
 class DownloadProgress(BaseModel):
