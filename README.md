@@ -7,7 +7,7 @@ A fullstack platform for downloading, visualizing, and backtesting historical F&
 - **Data Download** — Fetch historical OHLCV data for expired option contracts (rolling options) from Dhan API with rate limiting, chunked downloads, and duplicate detection
 - **ATM Straddle Visualization** — Intraday combined CE+PE premium chart and table with date/expiry selectors, spot overlay toggle
 - **Dynamic Straddle Backtester** — Backtest ATM straddle rolling strategy with bar-by-bar equity curve, drawdown, trade log, daily P&L, and full metrics
-- **Editable Commissions** — Slab-based turnover commission structure (verified against Zerodha F&O Options) with configurable lot sizes per symbol
+- **Editable Commissions** — Slab-based turnover commission structure  with configurable lot sizes per symbol
 - **IST Timestamps** — All data stored in IST for natural market-hours queries
 
 ## Stack
